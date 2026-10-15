@@ -1,0 +1,721 @@
+{
+  "name": "NGP-024 Email Security Posture Grader",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -496,
+        16
+      ],
+      "id": "6911a86c-6b57-4692-a183-27269f4a1b55",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7ac42548-847c-4d9b-9bf1-d5bcefeeaf02",
+              "name": "tag",
+              "value": "NGP-024",
+              "type": "string"
+            },
+            {
+              "id": "5b6e58c8-1704-4c3b-bb73-1488f398586a",
+              "name": "domain1",
+              "value": "google.com",
+              "type": "string"
+            },
+            {
+              "id": "f833d11f-b96c-41dc-a709-903d2f2bca1a",
+              "name": "domain2",
+              "value": "example.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -304,
+        16
+      ],
+      "id": "e97cffcb-ddcd-4a9e-8938-dfde5a858ae5",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "url": "https://dns.google/resolve",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "vulnweb.com"
+            },
+            {
+              "name": "type",
+              "value": "TXT"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -112,
+        16
+      ],
+      "id": "aff99d96-ed3b-458d-bc5b-9896e77aa733",
+      "name": "SPF - vulnweb.com"
+    },
+    {
+      "parameters": {
+        "url": "https://dns.google/resolve",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "_dmarc.vulnweb.com"
+            },
+            {
+              "name": "type",
+              "value": "TXT"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        80,
+        16
+      ],
+      "id": "0fbd7ec1-cd62-4ad4-bad4-a097f2a40e9c",
+      "name": "DMARC - vulnweb.com"
+    },
+    {
+      "parameters": {
+        "url": "https://dns.google/resolve",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "example.com"
+            },
+            {
+              "name": "type",
+              "value": "TXT"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        272,
+        16
+      ],
+      "id": "cbdd84e4-3bc2-4455-8e0e-1c8ff7000b40",
+      "name": "SPF - example.com"
+    },
+    {
+      "parameters": {
+        "url": "https://dns.google/resolve",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "_dmarc.example.com"
+            },
+            {
+              "name": "type",
+              "value": "TXT"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -480,
+        240
+      ],
+      "id": "c7857702-f759-41de-934b-db26e840a74c",
+      "name": "DMARC - example.com"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -112,
+        224
+      ],
+      "id": "f47d83ad-03a1-4143-9289-34ac58fae045",
+      "name": "Merge"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -288,
+        224
+      ],
+      "id": "433ccbc7-ba12-4662-85ed-dc510de89f04",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        64,
+        224
+      ],
+      "id": "af7262fc-2ae4-468d-a9a0-e96b1f599c4b",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(item => item.json);\n\nconst domains = [\"vulnweb.com\", \"example.com\"];\n\nconst report = domains.map(domain => {\n  const rootRecord = items.find(item =>\n    item.Question?.[0]?.name?.replace(/\\.$/, \"\") === domain\n  );\n\n  const dmarcRecord = items.find(item =>\n    item.Question?.[0]?.name?.replace(/\\.$/, \"\") ===\n    \"_dmarc.\" + domain\n  );\n\n  const spf = (rootRecord?.Answer ?? [])\n    .map(record => record.data ?? \"\")\n    .find(value => value.startsWith(\"v=spf1\")) ?? \"Missing\";\n\n  const dmarc = (dmarcRecord?.Answer ?? [])\n    .map(record => record.data ?? \"\")\n    .find(value => value.startsWith(\"v=DMARC1\"));\n\n  let dmarcPolicy = \"Missing\";\n\n  if (dmarc) {\n    const match = dmarc.match(/(?:^|;)\\s*p\\s*=\\s*(none|quarantine|reject)/i);\n    if (match) {\n      dmarcPolicy = match[1].toLowerCase();\n    } else {\n      dmarcPolicy = \"Invalid or unspecified\";\n    }\n  }\n\n  return {\n    domain,\n    spf_policy: spf,\n    dmarc_policy: dmarcPolicy\n  };\n});\n\nconst validationPassed = report.every(item =>\n  item.spf_policy !== \"Missing\"\n);\n\nreturn [{\n  json: {\n    report,\n    validation_passed: validationPassed,\n    validation_message: validationPassed\n      ? \"DNS data prepared successfully\"\n      : \"SPF record missing for one or more domains\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        224
+      ],
+      "id": "c15b1060-3a53-45d2-9119-34b3830175ea",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "chatId": "7298695549",
+        "text": "={{ $json.telegram_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        576,
+        480
+      ],
+      "id": "e2acfc8c-5135-4f41-a091-f53ab0ed3da6",
+      "name": "Send a text message",
+      "webhookId": "3d9dc699-bfcd-4157-8e41-6c97da369e42",
+      "credentials": {
+        "telegramApi": {
+          "id": "oA8DY5HAcmsgQ2fV",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the email security posture using this DNS data:\n{{ JSON.stringify($json.report ?? $json) }}\n\nReturn exactly one JSON object matching the connected schema.\nInclude exactly two results: vulnweb.com and example.com.\nFor each domain provide domain, grade, severity, spf_policy, dmarc_policy, and reason.\nUse grades A-F and severities LOW, MEDIUM, HIGH.\nUse HIGH severity for grade D, E, or F.\nMissing DMARC enforcement must receive a poor grade.\nDo not return Markdown or explanatory text outside the JSON object.\n",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        656,
+        208
+      ],
+      "id": "86b03109-21d9-42c4-8b3c-22909cc727e6",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        640,
+        16
+      ],
+      "id": "bda5f770-fcde-482a-9310-71222c772808",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "DDa62ZaueH1zqjW7",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9cac51e1-5252-4c47-bf64-20f952b539ad",
+              "leftValue": "={{ $json.validation_passed }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        368,
+        224
+      ],
+      "id": "67f11cff-1c8b-4eb1-aec6-01fec2b55440",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "677a40e7-3e0e-4f9b-a583-4ecd98747f3b",
+              "name": "tag",
+              "value": "HIGH",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        528,
+        208
+      ],
+      "id": "269f8680-3455-44be-8359-1bb5535ca0e1",
+      "name": "HIGH"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first()?.json ?? {};\nconst results = data.output?.results ?? data.results ?? [];\n\nconst validGrades = [\"A\", \"B\", \"C\", \"D\", \"E\", \"F\"];\nconst validSeverities = [\"LOW\", \"MEDIUM\", \"HIGH\"];\n\nconst validationPassed =\n  Array.isArray(results) &&\n  results.length === 2 &&\n  results.every(r =>\n    typeof r.domain === \"string\" &&\n    validGrades.includes(r.grade) &&\n    validSeverities.includes(r.severity) &&\n    typeof r.spf_policy === \"string\" &&\n    typeof r.dmarc_policy === \"string\" &&\n    typeof r.reason === \"string\" &&\n    r.reason.length <= 300\n  );\n\nconst telegramText = validationPassed\n  ? \"🟣 NGP-024 | exec #\" + $execution.id +\n    \"\\nEmail Security Posture Grader\\n\\n\" +\n    results.map(r =>\n      \"Domain: \" + r.domain +\n      \"\\nGrade: \" + r.grade +\n      \"\\nSeverity: \" + r.severity +\n      \"\\nTag: \" +\n      (r.severity === \"HIGH\" ||\n       [\"D\", \"E\", \"F\"].includes(r.grade)\n        ? \"HIGH\" : \"NORMAL\") +\n      \"\\nSPF: \" + r.spf_policy +\n      \"\\nDMARC: \" + r.dmarc_policy +\n      \"\\nReason: \" + r.reason\n    ).join(\"\\n\\n\")\n  : \"Fallback: AI Agent output is invalid. Please review the email security posture manually.\";\n\nreturn [{\n  json: {\n    results,\n    validation_passed: validationPassed,\n    validation_message: validationPassed\n      ? \"Output validation passed\"\n      : \"Output validation failed\",\n    telegram_text: telegramText\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        16
+      ],
+      "id": "00e50a6c-375c-469d-9c02-05417810d3b0",
+      "name": "validate ai output"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7d23355d-54cd-4862-b642-7d39d228b36f",
+              "leftValue": "={{ $json.validation_passed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        800,
+        16
+      ],
+      "id": "b9b2e8ee-d6db-4526-8200-71caa8413eac",
+      "name": "valid output ai?"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"results\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"domain\": {\n            \"type\": \"string\"\n          },\n          \"grade\": {\n            \"type\": \"string\",\n            \"enum\": [\"A\", \"B\", \"C\", \"D\", \"E\", \"F\"]\n          },\n          \"severity\": {\n            \"type\": \"string\",\n            \"enum\": [\"LOW\", \"MEDIUM\", \"HIGH\"]\n          },\n          \"spf_policy\": {\n            \"type\": \"string\"\n          },\n          \"dmarc_policy\": {\n            \"type\": \"string\"\n          },\n          \"reason\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"domain\",\n          \"grade\",\n          \"severity\",\n          \"spf_policy\",\n          \"dmarc_policy\",\n          \"reason\"\n        ],\n        \"additionalProperties\": false\n      }\n    }\n  },\n  \"required\": [\"results\"],\n  \"additionalProperties\": false\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        800,
+        496
+      ],
+      "id": "c94f9a38-42de-48b0-b333-b6e7d917f6e1",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "chatId": "7298695549",
+        "text": "Email Security Posture Grader: AI output validation failed after retry. Please review the domain security results manually.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        48,
+        416
+      ],
+      "id": "dbd3fb10-3d0c-4561-a3ef-88f9d410ee39",
+      "name": "Send a text message1",
+      "webhookId": "b068765e-703d-433d-9943-756e7bd1dad1",
+      "credentials": {
+        "telegramApi": {
+          "id": "oA8DY5HAcmsgQ2fV",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8f07895c-37d3-4d57-a622-ad7d97c26495",
+              "name": "retry_count",
+              "value": "1",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -288,
+        400
+      ],
+      "id": "d2d37bb5-c785-40c1-951e-a9ddf64e3c9b",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "16c13798-600d-479c-ba5d-3b450eccf585",
+              "leftValue": "={{ $json.retry_count }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -128,
+        400
+      ],
+      "id": "14300159-06e9-42d1-9eca-372fdf0163a5",
+      "name": "If1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "SPF - vulnweb.com",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SPF - vulnweb.com": {
+      "main": [
+        [
+          {
+            "node": "DMARC - vulnweb.com",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DMARC - vulnweb.com": {
+      "main": [
+        [
+          {
+            "node": "SPF - example.com",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "SPF - example.com": {
+      "main": [
+        [
+          {
+            "node": "DMARC - example.com",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DMARC - example.com": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "validate ai output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HIGH",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HIGH": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate ai output": {
+      "main": [
+        [
+          {
+            "node": "valid output ai?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "valid output ai?": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c68db146-b4dd-4611-ac77-4ca5400a56c7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fde806b9359f1053bac79ff770e03700d16c090624d028ec9bc2b478a9824794"
+  },
+  "nodeGroups": [],
+  "id": "6WAYOWyvlkbkjcUE",
+  "tags": []
+}
